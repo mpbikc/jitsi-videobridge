@@ -291,7 +291,7 @@ public class SimulcastSender
                     newEndpointsIDList.append(e.getID());
                     newEndpointsIDList.append(", ");
                 }
-                logger.debug("Now I'm watching: "
+                logger.debug(getReceiveEndpoint().getID() + " now I'm watching: "
                         + newEndpointsIDList.toString());
             }
         }
@@ -321,38 +321,60 @@ public class SimulcastSender
         // XXX Practically, we should react once anyway. But since we have to if
         // statements, it is technically possible to react twice. Which is
         // unnecessary.
+
+        int newTargetOrder;
         int oldTargetOrder = targetOrder;
 
         boolean thisWasInTheSelectedEndpoints
                 = oldEndpoints.contains(sendEndpoint);
-        boolean thisWillbeInTheSelectedEndpoints
+        boolean thisWillBeInTheSelectedEndpoints
                 = newEndpoints.contains(sendEndpoint);
 
-        if (thisWillbeInTheSelectedEndpoints)
+        if (thisWillBeInTheSelectedEndpoints)
         {
             int overrideOrder = getSimulcastSenderManager().getOverrideOrder();
             if (overrideOrder
                     == SimulcastSenderManager.SIMULCAST_LAYER_ORDER_NO_OVERRIDE)
             {
-                targetOrder = hqOrder;
+                newTargetOrder = hqOrder;
             }
             else
             {
-                targetOrder = Math.min(hqOrder, overrideOrder);
+                newTargetOrder = Math.min(hqOrder, overrideOrder);
             }
         }
         else if(thisWasInTheSelectedEndpoints)
-        { // It was in the old selected endpoints but it is not present in the
-          // new ones
-            targetOrder = lqOrder;
+        {
+            // It was in the old selected endpoints but it is not present in the
+            // new ones
+            newTargetOrder = lqOrder;
+        }
+        else
+        {
+            newTargetOrder = oldTargetOrder;
         }
 
-        if (oldTargetOrder != targetOrder)
+        if (logger.isDebugEnabled())
         {
+            logger.debug(getReceiveEndpoint().getID() + "/" +
+                getSendEndpoint().getID() + " old endpoints: " + oldEndpoints);
+            logger.debug(getReceiveEndpoint().getID() + "/" +
+                getSendEndpoint().getID() + " new endpoints: " + newEndpoints);
+            logger.debug(getReceiveEndpoint().getID() + "/" +
+                getSendEndpoint().getID() + " oldTargetOrder=" + oldTargetOrder);
+            logger.debug(getReceiveEndpoint().getID() + "/" +
+                getSendEndpoint().getID() + " newTargetOrder=" + newTargetOrder);
+        }
+
+
+        if (oldTargetOrder != newTargetOrder)
+        {
+            targetOrder = newTargetOrder;
+
             SendMode sm = this.sendMode;
             if (sm != null)
             {
-                this.sendMode.receive(targetOrder);
+                this.sendMode.receive(newTargetOrder);
             }
         }
     }

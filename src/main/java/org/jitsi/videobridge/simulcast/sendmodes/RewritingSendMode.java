@@ -42,6 +42,13 @@ public class RewritingSendMode
             = Logger.getLogger(RewritingSendMode.class);
 
     /**
+     * The value of {@link Logger#isWarnEnabled()} from the time of the
+     * initialization of the class {@code RewritingSendMode} cached for the
+     * purposes of performance.
+     */
+    private static final boolean WARN = logger.isWarnEnabled();
+
+    /**
      * Holds the state of this {@code RewritingSendMode}. Grouping the state in
      * a single object allows for synchronized-less code.
      */
@@ -78,6 +85,7 @@ public class RewritingSendMode
 
         SimulcastStream next = oldState.getNext();
 
+        // Protection against key frame packet re-ordering.
         Long pktSSRC = pkt.getSSRCAsLong();
         int pktSeq = pkt.getSequenceNumber();
 
@@ -86,6 +94,14 @@ public class RewritingSendMode
             = (lastReceivedSeq == null)
                 ? 1
                 : RTPUtils.sequenceNumberDiff(pktSeq, lastReceivedSeq);
+
+        if (WARN)
+        {
+            if (next != null && oldState.hasStalled())
+            {
+                logger.warn("Switching has stalled.");
+            }
+        }
 
         boolean accept = false;
         if (next != null && next.matches(pkt) && next.isKeyFrame(pkt))
@@ -148,12 +164,43 @@ public class RewritingSendMode
         SimulcastStream current = oldState.getCurrent();
         SimulcastStream next = oldState.getNext();
 
-        if (current == simStream || next == simStream)
+        if (current == simStream)
         {
             if (logger.isDebugEnabled())
             {
                 logger.debug("order-" + simStream.getOrder()
-                        + " stream is already the target.");
+                    + " stream is already streaming from " +
+                    getSimulcastSender().getSimulcastReceiver()
+                        .getSimulcastEngine()
+                        .getVideoChannel().getEndpoint().getID() + ".");
+            }
+
+            if (next != null)
+            {
+                if (logger.isDebugEnabled())
+                {
+                    logger.debug("Forgetting next stream of order-"
+                        + simStream.getOrder() + " from " +
+                        getSimulcastSender().getSimulcastReceiver()
+                            .getSimulcastEngine()
+                            .getVideoChannel().getEndpoint().getID() + ".");
+                }
+
+                this.state = new State(new WeakReference<>(simStream), null);
+            }
+
+            return;
+        }
+
+        if (next == simStream)
+        {
+            if (logger.isDebugEnabled())
+            {
+                logger.debug("order-" + simStream.getOrder()
+                        + " stream is already the target from " +
+                    getSimulcastSender().getSimulcastReceiver()
+                        .getSimulcastEngine()
+                        .getVideoChannel().getEndpoint().getID() + ".");
             }
 
             return;
@@ -187,6 +234,12 @@ public class RewritingSendMode
     static class State
     {
         /**
+         * The number of millis after which we mark this object as stalled, if we're
+         * still waiting for a switch.
+         */
+        private static final long STALL_DELTA_MS = 5 * 1000;
+
+        /**
          * A <tt>WeakReference</tt> to the <tt>SimulcastStream</tt> that is
          * currently being received.
          */
@@ -197,6 +250,11 @@ public class RewritingSendMode
          * (possibly) received next.
          */
         private final WeakReference<SimulcastStream> weakNext;
+
+        /**
+         * Indicates the creation time of this object.
+         */
+        private final long created;
 
         /**
          * Ctor.
@@ -212,6 +270,7 @@ public class RewritingSendMode
         {
             this.weakCurrent = weakCurrent;
             this.weakNext = weakNext;
+            this.created = System.currentTimeMillis();
         }
 
         /**
@@ -236,6 +295,18 @@ public class RewritingSendMode
         public SimulcastStream getCurrent()
         {
             return weakCurrent == null ? null : weakCurrent.get();
+        }
+
+        /**
+         * Gets a boolean indicating whether this state is stalled or not.
+         *
+         * @return true if a switch is requred but <tt>STALLED_DELTA_MS</tt>
+         * have passed, otherwise false.
+         */
+        public boolean hasStalled()
+        {
+            return getNext() != null && System.currentTimeMillis() - created
+                > STALL_DELTA_MS;
         }
     }
 }

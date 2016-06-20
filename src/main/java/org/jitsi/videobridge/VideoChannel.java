@@ -201,7 +201,7 @@ public class VideoChannel
     {
         super(content, id, channelBundleId, transportNamespace, initiator);
 
-        setTransformEngine(new RtpChannelTransformEngine(this));
+        initializeTransformerEngine();
 
         ConfigurationService cfg
             = content.getConference().getVideobridge()
@@ -759,7 +759,6 @@ public class VideoChannel
             if (Constants.RED.equals(payloadType.getName()))
             {
                 enableRedFilter = false;
-                break;
             }
 
             if (Constants.VP8.equalsIgnoreCase(payloadType.getName()))

@@ -23,6 +23,7 @@ import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
 import org.jitsi.eventadmin.*;
+import org.jitsi.impl.neomedia.device.*;
 import org.jitsi.impl.neomedia.rtp.translator.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.service.neomedia.device.*;
@@ -156,13 +157,9 @@ public class Content
 
         mediaType = MediaType.parseString(this.name);
 
-        EventAdmin eventAdmin
-            = this.conference.getVideobridge().getEventAdmin();
-
+        EventAdmin eventAdmin = conference.getEventAdmin();
         if (eventAdmin != null)
-        {
             eventAdmin.sendEvent(EventFactory.contentCreated(this));
-        }
 
         touch();
     }
@@ -389,12 +386,13 @@ public class Content
         }
 
         setRecording(false, null);
+
         Conference conference = getConference();
 
-        EventAdmin eventAdmin
-                = conference.getVideobridge().getEventAdmin();
+        EventAdmin eventAdmin = conference.getEventAdmin();
         if (eventAdmin != null)
             eventAdmin.sendEvent(EventFactory.contentExpired(this));
+
         try
         {
             conference.expireContent(this);

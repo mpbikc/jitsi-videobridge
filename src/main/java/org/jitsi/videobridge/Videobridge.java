@@ -27,13 +27,13 @@ import net.java.sip.communicator.util.*;
 
 import org.ice4j.ice.harvest.*;
 import org.ice4j.stack.*;
+import org.jitsi.eventadmin.*;
 import org.jitsi.osgi.*;
 import org.jitsi.service.configuration.*;
 import org.jitsi.service.libjitsi.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.util.*;
 import org.jitsi.util.Logger;
-import org.jitsi.eventadmin.*;
 import org.jitsi.videobridge.health.*;
 import org.jitsi.videobridge.pubsub.*;
 import org.jitsi.videobridge.xmpp.*;
@@ -221,10 +221,37 @@ public class Videobridge
      * the conference focus which will own the new instance i.e. from whom
      * further/future requests to manage the new instance must come or they will
      * be ignored. Pass <tt>null</tt> to override this safety check.
+     * @param name world readable name of the conference to create.
      * @return a new <tt>Conference</tt> instance with an ID unique to the
      * <tt>Conference</tt> instances listed by this <tt>Videobridge</tt>
      */
-    public Conference createConference(String focus)
+    public Conference createConference(String focus, String name)
+    {
+        return this.createConference(focus, name, /* eventadmin */ true);
+    }
+
+    /**
+     * Initializes a new {@link Conference} instance with an ID unique to the
+     * <tt>Conference</tt> instances listed by this <tt>Videobridge</tt> and
+     * adds the new instance to the list of existing <tt>Conference</tt>
+     * instances. Optionally the new instance is owned by a specific conference
+     * focus i.e. further/future requests to manage the new instance must come
+     * from the specified <tt>focus</tt> or they will be ignored. If the focus
+     * is not specified this safety check is overridden.
+     *
+     * @param focus (optional) a <tt>String</tt> which specifies the JID of
+     * the conference focus which will own the new instance i.e. from whom
+     * further/future requests to manage the new instance must come or they will
+     * be ignored. Pass <tt>null</tt> to override this safety check.
+     * @param name world readable name of the conference to create.
+     * @param eventadmin {@code true} to enable support for the
+     * {@code eventadmin} package i.e. fire {@code Event}s through
+     * {@code EventAdmin}; otherwise, {@code false}
+     * @return a new <tt>Conference</tt> instance with an ID unique to the
+     * <tt>Conference</tt> instances listed by this <tt>Videobridge</tt>
+     */
+    public Conference createConference(
+        String focus, String name, boolean eventadmin)
     {
         Conference conference = null;
 
@@ -236,7 +263,13 @@ public class Videobridge
             {
                 if (!conferences.containsKey(id))
                 {
-                    conference = new Conference(this, id, focus);
+                    conference
+                        = new Conference(
+                                this,
+                                id,
+                                focus,
+                                name,
+                                eventadmin ? getEventAdmin() : null);
                     conferences.put(id, conference);
                 }
             }
@@ -523,13 +556,13 @@ public class Videobridge
     }
 
     /**
-     * Returns the <tt>LoggingService</tt> used by this
+     * Returns the <tt>EventAdmin</tt> instance (to be) used by this
      * <tt>Videobridge</tt>.
      *
-     * @return the <tt>LoggingService</tt> used by this
+     * @return the <tt>EventAdmin</tt> instance (to be) used by this
      * <tt>Videobridge</tt>.
      */
-    public EventAdmin getEventAdmin()
+    private EventAdmin getEventAdmin()
     {
         BundleContext bundleContext = getBundleContext();
 
@@ -611,7 +644,8 @@ public class Videobridge
             {
                 if (!isShutdownInProgress())
                 {
-                    conference = createConference(focus);
+                    conference
+                        = createConference(focus, conferenceIQ.getName());
                 }
                 else
                 {
@@ -642,10 +676,6 @@ public class Videobridge
         }
         else
         {
-            String name = conferenceIQ.getName();
-            if (name != null)
-                conference.setName(name);
-
             responseConferenceIQ = new ColibriConferenceIQ();
             conference.describeShallow(responseConferenceIQ);
 
@@ -817,6 +847,13 @@ public class Videobridge
                             if (adaptiveSimulcast != null)
                                 channel.setAdaptiveSimulcast(adaptiveSimulcast);
 
+                            // Packet delay - for automated testing purpose only
+                            Integer packetDelay = channelIQ.getPacketDelay();
+                            if (packetDelay != null)
+                            {
+                                channel.setPacketDelay(packetDelay);
+                            }
+
                             /*
                              * XXX The attribute initiator is optional. If a
                              * value is not specified, then the Channel
@@ -876,12 +913,11 @@ public class Videobridge
 
                             EventAdmin eventAdmin;
                             if (channelCreated
-                                    && (eventAdmin = getEventAdmin())
-                                        != null)
+                                    && (eventAdmin = getEventAdmin()) != null)
 
                             {
                                 eventAdmin.sendEvent(
-                                    EventFactory.channelCreated(channel));
+                                        EventFactory.channelCreated(channel));
                             }
 
                             // XXX we might want to fire more precise events,
@@ -1404,11 +1440,6 @@ public class Videobridge
                         + " initialization.",
                     e);
         }
-
-        // CandidateHarvesters may take (non-trivial) time to initialize so
-        // initialize them as soon as possible, don't wait to initialize them
-        // after a Channel is requested.
-        IceUdpTransportManager.initializeStaticHarvesters(cfg);
     }
 
     /**

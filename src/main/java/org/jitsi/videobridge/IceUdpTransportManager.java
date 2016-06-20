@@ -316,7 +316,7 @@ public class IceUdpTransportManager
         iceStream = iceAgent.getStream(iceStreamName);
         iceStream.addPairChangeListener(iceStreamPairChangeListener);
 
-        EventAdmin eventAdmin = conference.getVideobridge().getEventAdmin();
+        EventAdmin eventAdmin = conference.getEventAdmin();
         if (eventAdmin != null)
             eventAdmin.sendEvent(EventFactory.transportCreated(this));
     }
@@ -402,7 +402,7 @@ public class IceUdpTransportManager
         if (iceConnected)
             channel.transportConnected();
 
-        EventAdmin eventAdmin = conference.getVideobridge().getEventAdmin();
+        EventAdmin eventAdmin = conference.getEventAdmin();
         if (eventAdmin != null)
             eventAdmin.sendEvent(EventFactory.transportChannelAdded(channel));
 
@@ -500,10 +500,24 @@ public class IceUdpTransportManager
     private void appendVideobridgeHarvesters(Agent iceAgent,
                                              boolean rtcpmux)
     {
+        ConfigurationService cfg
+            = ServiceUtils.getService(
+                    getBundleContext(),
+                    ConfigurationService.class);
         boolean enableDynamicHostHarvester = true;
 
         if (rtcpmux)
         {
+            // TODO CandidateHarvesters may take (non-trivial) time to
+            // initialize so initialize them as soon as possible, don't wait to
+            // initialize them after a Channel is requested.
+            // XXX Unfortunately, TcpHarvester binds to specific local addresses
+            // while Jetty binds to all/any local addresses and, consequently,
+            // the order of the binding is important at the time of this
+            // writing. That's why TcpHarvester is left to initialize as late as
+            // possible right now.
+            initializeStaticHarvesters(cfg);
+
             if (tcpHostHarvester != null)
                 iceAgent.addCandidateHarvester(tcpHostHarvester);
             if (singlePortHarvesters != null)
@@ -518,11 +532,6 @@ public class IceUdpTransportManager
 
         // Use dynamic ports iff we're not sing "single port".
         iceAgent.setUseHostHarvester(enableDynamicHostHarvester);
-
-        ConfigurationService cfg
-            = ServiceUtils.getService(
-                    getBundleContext(),
-                    ConfigurationService.class);
 
         //if no configuration is found then we simply log and bail
         if (cfg == null)
@@ -742,7 +751,7 @@ public class IceUdpTransportManager
                 logd("Failed to close sockets when closing a channel:" + ioe);
             }
 
-            EventAdmin eventAdmin = conference.getVideobridge().getEventAdmin();
+            EventAdmin eventAdmin = conference.getEventAdmin();
             if (eventAdmin != null)
             {
                 eventAdmin.sendEvent(
@@ -1647,7 +1656,7 @@ public class IceUdpTransportManager
                 .append(newState).append(".");
             logd(s.toString());
 
-            EventAdmin eventAdmin = conference.getVideobridge().getEventAdmin();
+            EventAdmin eventAdmin = conference.getEventAdmin();
             if (eventAdmin != null)
             {
                 eventAdmin.sendEvent(
@@ -1810,7 +1819,7 @@ public class IceUdpTransportManager
     {
         iceConnected = true;
 
-        EventAdmin eventAdmin = conference.getVideobridge().getEventAdmin();
+        EventAdmin eventAdmin = conference.getEventAdmin();
         if (eventAdmin != null)
             eventAdmin.sendEvent(EventFactory.transportConnected(this));
 
